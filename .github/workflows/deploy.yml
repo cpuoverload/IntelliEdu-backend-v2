@@ -7,7 +7,7 @@ on:
 
 env:
   DOCKERHUB_USERNAME: cpuoverload
-  IMAGE_NAME: ${{ env.DOCKERHUB_USERNAME }}/intelliedu
+  IMAGE_NAME: cpuoverload/intelliedu
   CONTAINER_NAME: intelliedu
 
 jobs:
