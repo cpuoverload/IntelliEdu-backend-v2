@@ -24,7 +24,6 @@ spring:
     username: ${PROD_REDIS_USERNAME}
     password: ${PROD_REDIS_PASSWORD}
     timeout: 5000
-    ssl: true
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true

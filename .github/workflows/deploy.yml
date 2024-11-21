@@ -62,6 +62,7 @@ jobs:
               --name ${{ env.CONTAINER_NAME }} \
               --restart unless-stopped \
               -p 80:8081 \
+              --env-file .env \
               ${{ env.IMAGE_NAME }}:latest
             
             # 清理不用的镜像
