@@ -61,7 +61,7 @@ jobs:
             docker run -d \
               --name ${{ env.CONTAINER_NAME }} \
               --restart unless-stopped \
-              -p 80:8081 \
+              -p 8081:8081 \
               --env-file .env \
               ${{ env.IMAGE_NAME }}:latest
             
