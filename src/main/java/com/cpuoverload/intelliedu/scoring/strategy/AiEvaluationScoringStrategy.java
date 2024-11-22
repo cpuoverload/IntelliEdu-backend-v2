@@ -1,5 +1,7 @@
 package com.cpuoverload.intelliedu.scoring.strategy;
 
+import cn.hutool.core.util.StrUtil;
+import cn.hutool.crypto.digest.DigestUtil;
 import cn.hutool.json.JSONUtil;
 import com.cpuoverload.intelliedu.manager.AiManager;
 import com.cpuoverload.intelliedu.model.dto.question.QuestionContent;
@@ -11,10 +13,13 @@ import com.cpuoverload.intelliedu.model.vo.QuestionVo;
 import com.cpuoverload.intelliedu.scoring.ScoringStrategy;
 import com.cpuoverload.intelliedu.scoring.annotation.ScoringStrategyConfig;
 import com.cpuoverload.intelliedu.service.QuestionService;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 
 import javax.annotation.Resource;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import static com.cpuoverload.intelliedu.constant.AIConstant.AI_EVALUATION_SCORING_SYSTEM_MESSAGE;
 
@@ -30,6 +35,17 @@ public class AiEvaluationScoringStrategy implements ScoringStrategy {
 
     @Resource
     private AiManager aiManager;
+
+    // 用 Caffine 缓存 AI 生成的测评结果
+    private final Cache<String, String> resultCacheMap = Caffeine.newBuilder()
+            .initialCapacity(1024)
+            .expireAfterAccess(1, TimeUnit.DAYS)
+            .build();
+
+    // 构建缓存 key (appId + 用户答案列表的 MD5)
+    private String buildKey(long appId, List<String> answerList) {
+        return appId + DigestUtil.md5Hex(JSONUtil.toJsonStr(answerList));
+    }
 
     private String getAiEvaluationScoringUserMessage(Application application, List<QuestionContent> questionContentList, List<String> answerList) {
         StringBuilder userMessage = new StringBuilder();
@@ -56,23 +72,42 @@ public class AiEvaluationScoringStrategy implements ScoringStrategy {
     }
 
     @Override
-    public AnswerRecord doScore(List<String> answerList, Application application) throws Exception {
+    public AnswerRecord doScore(List<String> answerList, Application application) {
         Long appId = application.getId();
-        // 1. 根据 appId 查询到对应题目
+
+        // 尝试从缓存中取结果
+        String cacheKey = buildKey(appId, answerList);
+        String cacheResult = resultCacheMap.getIfPresent(cacheKey);
+
+        if (StrUtil.isNotBlank(cacheResult)) {
+            AnswerRecord answerRecord = JSONUtil.toBean(cacheResult, AnswerRecord.class);
+            answerRecord.setAppId(appId);
+            answerRecord.setAppType(application.getType());
+            answerRecord.setStrategy(application.getStrategy());
+            answerRecord.setAnswers(answerList);
+            return answerRecord;
+        }
+
+        // 查询对应题目
         Question question = questionService.getQuestionByAppId(appId);
         QuestionVo questionVo = QuestionVo.objToVo(question);
         List<QuestionContent> questionContent = questionVo.getQuestions();
-        // 2. 调用 AI 获取结果
+
+        // 调用 AI 获取结果
         // 封装 Prompt
         String userMessage = getAiEvaluationScoringUserMessage(application, questionContent, answerList);
-        // AI 生成
+        // AI 生成结果
         String result = aiManager.doRequest(AI_EVALUATION_SCORING_SYSTEM_MESSAGE, userMessage);
         // 结果处理
         int start = result.indexOf("{");
         int end = result.lastIndexOf("}");
-        String json = result.substring(start, end + 1);
-        // 3. 构造返回值，填充答案对象的属性
-        AnswerRecord answerRecord = JSONUtil.toBean(json, AnswerRecord.class);
+        String jsonStr = result.substring(start, end + 1);
+
+        // 缓存结果
+        resultCacheMap.put(cacheKey, jsonStr);
+
+        // 构造返回值
+        AnswerRecord answerRecord = JSONUtil.toBean(jsonStr, AnswerRecord.class);
         answerRecord.setAppId(appId);
         answerRecord.setAppType(application.getType());
         answerRecord.setStrategy(application.getStrategy());

@@ -19,6 +19,7 @@ import java.util.Map;
 
 /**
  * 自定义测评类应用评分策略
+ * todo 打分逻辑由 AI 生成，可能有问题
  */
 @ScoringStrategyConfig(appType = 1, scoringStrategy = 0)
 public class CustomEvaluationScoringStrategy implements ScoringStrategy {
@@ -30,7 +31,7 @@ public class CustomEvaluationScoringStrategy implements ScoringStrategy {
     private ScoringService scoringService;
 
     @Override
-    public AnswerRecord doScore(List<String> answerList, Application application) throws Exception {
+    public AnswerRecord doScore(List<String> answerList, Application application) {
         Long appId = application.getId();
         // 1. 根据 appId 查询到题目和题目结果信息
         Question question = questionService.getQuestionByAppId(appId);

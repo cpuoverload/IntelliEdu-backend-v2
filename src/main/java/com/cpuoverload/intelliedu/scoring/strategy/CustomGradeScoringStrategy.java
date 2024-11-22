@@ -18,6 +18,7 @@ import java.util.Optional;
 
 /**
  * 自定义打分类应用评分策略
+ * todo 打分逻辑由 AI 生成，可能有问题
  */
 @ScoringStrategyConfig(appType = 0, scoringStrategy = 0)
 public class CustomGradeScoringStrategy implements ScoringStrategy {
@@ -29,7 +30,7 @@ public class CustomGradeScoringStrategy implements ScoringStrategy {
     private ScoringService scoringService;
 
     @Override
-    public AnswerRecord doScore(List<String> answerList, Application application) throws Exception {
+    public AnswerRecord doScore(List<String> answerList, Application application) {
         Long appId = application.getId();
         // 1. 根据 id 查询到题目和题目结果信息（按分数降序排序）
         Question question = questionService.getQuestionByAppId(appId);
