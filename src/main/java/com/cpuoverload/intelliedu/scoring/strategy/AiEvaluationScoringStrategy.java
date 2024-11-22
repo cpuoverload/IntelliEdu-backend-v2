@@ -3,7 +3,7 @@ package com.cpuoverload.intelliedu.scoring.strategy;
 import cn.hutool.json.JSONUtil;
 import com.cpuoverload.intelliedu.manager.AiManager;
 import com.cpuoverload.intelliedu.model.dto.question.QuestionContent;
-import com.cpuoverload.intelliedu.model.dto.scoring.AiDoScoreRequest;
+import com.cpuoverload.intelliedu.model.dto.scoring.QuestionAnswer;
 import com.cpuoverload.intelliedu.model.entity.AnswerRecord;
 import com.cpuoverload.intelliedu.model.entity.Application;
 import com.cpuoverload.intelliedu.model.entity.Question;
@@ -31,22 +31,29 @@ public class AiEvaluationScoringStrategy implements ScoringStrategy {
     @Resource
     private AiManager aiManager;
 
-
     private String getAiEvaluationScoringUserMessage(Application application, List<QuestionContent> questionContentList, List<String> answerList) {
         StringBuilder userMessage = new StringBuilder();
         userMessage.append("Application name: ").append(application.getAppName()).append("\n");
         userMessage.append("Application description: ").append(application.getDescription()).append("\n");
-        List<AiDoScoreRequest> aiDoScoreRequestList = new ArrayList<>();
+
+        List<QuestionAnswer> questionAnswerList = new ArrayList<>();
         for (int i = 0; i < questionContentList.size(); i++) {
-            AiDoScoreRequest aiDoScoreRequest = new AiDoScoreRequest();
-            aiDoScoreRequest.setTitle(questionContentList.get(i).getTitle());
-            aiDoScoreRequest.setUserAnswer(answerList.get(i));
-            aiDoScoreRequestList.add(aiDoScoreRequest);
+            QuestionContent questionContent = questionContentList.get(i);
+            String answer = answerList.get(i);
+            // 根据用户选项（如 A）查找对应的选项内容
+            QuestionContent.Option option = questionContent.getOptions().stream()
+                    .filter(opt -> opt.getKey().equals(answer))
+                    .findFirst()
+                    .get();
+            QuestionAnswer questionAnswer = new QuestionAnswer();
+            questionAnswer.setTitle(questionContent.getTitle());
+            questionAnswer.setUserAnswerText(option.getValue());
+            questionAnswerList.add(questionAnswer);
         }
-        userMessage.append("List of questions and user answers: ").append(JSONUtil.toJsonStr(aiDoScoreRequestList));
+
+        userMessage.append("List of questions and user answers: ").append(JSONUtil.toJsonStr(questionAnswerList));
         return userMessage.toString();
     }
-
 
     @Override
     public AnswerRecord doScore(List<String> answerList, Application application) throws Exception {
@@ -72,5 +79,4 @@ public class AiEvaluationScoringStrategy implements ScoringStrategy {
         answerRecord.setAnswers(answerList);
         return answerRecord;
     }
-
 }
