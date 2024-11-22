@@ -44,10 +44,6 @@ public class AnswerRecordServiceImpl extends ServiceImpl<AnswerRecordMapper, Ans
     @Resource
     private ScoringStrategyExecutor scoringStrategyExecutor;
 
-    @Resource
-    AnswerRecordMapper answerRecordMapper;
-
-
     public void validate(AnswerRecord answerRecord) {
         if (answerRecord == null) {
             throw new BusinessException(Err.PARAMS_ERROR);
@@ -85,8 +81,8 @@ public class AnswerRecordServiceImpl extends ServiceImpl<AnswerRecordMapper, Ans
         answerRecord.setUserId(userId);
         Application application = applicationService.getApplicationById(answerRecord.getAppId());
 
-        int saveResult = answerRecordMapper.insert(answerRecord);
-        if (saveResult <= 0) {
+        boolean success = save(answerRecord);
+        if (!success) {
             throw new BusinessException(Err.SYSTEM_ERROR, "save answer record failed");
         }
         Long answerRecordId = answerRecord.getId();
@@ -95,7 +91,7 @@ public class AnswerRecordServiceImpl extends ServiceImpl<AnswerRecordMapper, Ans
         try {
             AnswerRecord userAnswerWithResult = scoringStrategyExecutor.doScore(answerRecord.getAnswers(), application);
             userAnswerWithResult.setId(answerRecordId);
-            answerRecordMapper.updateById(userAnswerWithResult);
+            updateById(userAnswerWithResult);
         } catch (Exception e) {
             log.error("do score failed", e);
             throw new BusinessException(Err.SYSTEM_ERROR, "do score failed");

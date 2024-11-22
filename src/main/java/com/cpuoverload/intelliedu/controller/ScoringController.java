@@ -7,14 +7,15 @@ import com.cpuoverload.intelliedu.exception.BusinessException;
 import com.cpuoverload.intelliedu.exception.Err;
 import com.cpuoverload.intelliedu.model.dto.scoring.*;
 import com.cpuoverload.intelliedu.model.entity.AnswerRecord;
-import com.cpuoverload.intelliedu.model.entity.Application;
 import com.cpuoverload.intelliedu.model.entity.Scoring;
 import com.cpuoverload.intelliedu.model.vo.ScoringVo;
 import com.cpuoverload.intelliedu.scoring.ScoringStrategyExecutor;
-import com.cpuoverload.intelliedu.service.ApplicationService;
 import com.cpuoverload.intelliedu.service.ScoringService;
 import org.springframework.beans.BeanUtils;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
@@ -28,18 +29,8 @@ public class ScoringController {
     @Resource
     private ScoringService scoringService;
 
-
-    @Resource
-    private ApplicationService applicationService;
-
     @Resource
     private ScoringStrategyExecutor scoringStrategyExecutor;
-
-    @GetMapping("test/getAppById")
-    public Application getAppByIdTest(@RequestParam Long id) {
-        return applicationService.getApplicationById(id);
-    }
-
 
     // 普通用户添加评分规则
     @PostMapping("/add/me")

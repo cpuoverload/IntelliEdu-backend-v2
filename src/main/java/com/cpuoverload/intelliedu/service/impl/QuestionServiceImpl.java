@@ -38,9 +38,6 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question>
     @Resource
     private UserService userService;
 
-    @Resource
-    private QuestionMapper questionMapper;
-
     public void validate(Question question) {
         if (question == null) {
             throw new BusinessException(Err.PARAMS_ERROR);
@@ -231,16 +228,11 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question>
 
     @Override
     public Question getQuestionByAppId(Long appId) {
-        if (appId != null && appId > 0) {
-            QueryWrapper<Question> queryWrapper = new QueryWrapper<>();
-            queryWrapper.eq("app_id", appId);
-            return questionMapper.selectOne(queryWrapper);
+        if (appId == null || appId <= 0) {
+            throw new BusinessException(Err.PARAMS_ERROR);
         }
-
-        return null;
+        QueryWrapper<Question> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("app_id", appId);
+        return getOne(queryWrapper);
     }
 }
-
-
-
-

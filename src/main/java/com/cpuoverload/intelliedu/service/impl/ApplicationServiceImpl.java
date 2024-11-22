@@ -37,9 +37,6 @@ public class ApplicationServiceImpl extends ServiceImpl<ApplicationMapper, Appli
     @Resource
     private UserService userService;
 
-    @Resource
-    private ApplicationMapper applicationMapper;
-
     public void validate(Application application) {
         if (application == null) {
             throw new BusinessException(Err.PARAMS_ERROR);
@@ -276,12 +273,10 @@ public class ApplicationServiceImpl extends ServiceImpl<ApplicationMapper, Appli
 
     @Override
     public Application getApplicationById(Long id) {
-        if (id != null && id > 0) {
-            return applicationMapper.selectById(id);
+        if (id == null || id <= 0) {
+            throw new BusinessException(Err.PARAMS_ERROR);
         }
 
-        return null;
+        return getById(id);
     }
-
-
 }
