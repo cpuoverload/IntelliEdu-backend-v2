@@ -15,7 +15,8 @@ public enum Err {
     DELETE_ERROR(10008, "Delete failed"),
     UPDATE_ERROR(10009, "Update failed"),
     NOT_FOUND_ERROR(10010, "Not found"),
-    EXISTED_ERROR(10011, "Already existed");
+    EXISTED_ERROR(10011, "Already existed"),
+    TOO_MANY_REQUEST(10012, "Too many requests");
 
     private final int code;
     private final String message;

@@ -6,12 +6,14 @@ import com.cpuoverload.intelliedu.common.response.ApiResponse;
 import com.cpuoverload.intelliedu.exception.BusinessException;
 import com.cpuoverload.intelliedu.exception.Err;
 import com.cpuoverload.intelliedu.manager.AiManager;
+import com.cpuoverload.intelliedu.manager.RedisLimiterManager;
 import com.cpuoverload.intelliedu.model.dto.question.*;
 import com.cpuoverload.intelliedu.model.entity.Application;
 import com.cpuoverload.intelliedu.model.entity.Question;
 import com.cpuoverload.intelliedu.model.vo.QuestionVo;
 import com.cpuoverload.intelliedu.service.ApplicationService;
 import com.cpuoverload.intelliedu.service.QuestionService;
+import com.cpuoverload.intelliedu.service.UserService;
 import com.cpuoverload.intelliedu.utils.AIMessageUtil;
 import dev.ai4j.openai4j.chat.ChatCompletionResponse;
 import lombok.extern.slf4j.Slf4j;
@@ -37,9 +39,14 @@ public class QuestionController {
     @Resource
     private ApplicationService applicationService;
 
+    @Resource
+    private UserService userService;
 
     @Resource
     AiManager aiManager;
+
+    @Resource
+    private RedisLimiterManager redisLimiterManager;
 
     // 获取一个应用的题目列表（不要分页）
     @PostMapping("/get/public")
@@ -151,7 +158,16 @@ public class QuestionController {
     }
 
     @GetMapping("/ai_generate/sse")
-    public SseEmitter aiGenerateQuestionSse(Long appId, Integer questionNumber, Integer optionNumber) {
+    public SseEmitter aiGenerateQuestionSse(
+            Long appId,
+            Integer questionNumber,
+            Integer optionNumber,
+            HttpServletRequest request) {
+        Long userId = userService.getLoginUserId(request);
+
+        // 限流
+        redisLimiterManager.doRateLimit(userId + "_aiGenerateQuestionSSE");  // 粒度：用户 + 方法
+
         if (appId == null || questionNumber == null || optionNumber == null) {
             throw new BusinessException(Err.PARAMS_ERROR);
         }
