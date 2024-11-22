@@ -15,6 +15,8 @@ import com.cpuoverload.intelliedu.scoring.annotation.ScoringStrategyConfig;
 import com.cpuoverload.intelliedu.service.QuestionService;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 
 import javax.annotation.Resource;
 import java.util.ArrayList;
@@ -35,6 +37,12 @@ public class AiEvaluationScoringStrategy implements ScoringStrategy {
 
     @Resource
     private AiManager aiManager;
+
+    @Resource
+    private RedissonClient redissonClient;
+
+    // Redisson 锁 key，用于解决缓存击穿
+    private static final String AI_RESULT_LOCK = "AI_RESULT_LOCK";
 
     // 用 Caffine 缓存 AI 生成的测评结果
     private final Cache<String, String> resultCacheMap = Caffeine.newBuilder()
@@ -72,7 +80,7 @@ public class AiEvaluationScoringStrategy implements ScoringStrategy {
     }
 
     @Override
-    public AnswerRecord doScore(List<String> answerList, Application application) {
+    public AnswerRecord doScore(List<String> answerList, Application application) throws Exception {
         Long appId = application.getId();
 
         // 尝试从缓存中取结果
@@ -88,30 +96,48 @@ public class AiEvaluationScoringStrategy implements ScoringStrategy {
             return answerRecord;
         }
 
-        // 查询对应题目
-        Question question = questionService.getQuestionByAppId(appId);
-        QuestionVo questionVo = QuestionVo.objToVo(question);
-        List<QuestionContent> questionContent = questionVo.getQuestions();
+        RLock lock = redissonClient.getLock(AI_RESULT_LOCK + cacheKey); // 注意锁粒度
 
-        // 调用 AI 获取结果
-        // 封装 Prompt
-        String userMessage = getAiEvaluationScoringUserMessage(application, questionContent, answerList);
-        // AI 生成结果
-        String result = aiManager.doRequest(AI_EVALUATION_SCORING_SYSTEM_MESSAGE, userMessage);
-        // 结果处理
-        int start = result.indexOf("{");
-        int end = result.lastIndexOf("}");
-        String jsonStr = result.substring(start, end + 1);
+        try {
+            boolean haveLock = lock.tryLock(3, 15, TimeUnit.SECONDS);
 
-        // 缓存结果
-        resultCacheMap.put(cacheKey, jsonStr);
+            // 如果没有抢到锁，认为失败，不再调用 ai 接口（也可以有别的处理，暂时先这么写）
+            if (!haveLock) {
+                return null;
+            }
 
-        // 构造返回值
-        AnswerRecord answerRecord = JSONUtil.toBean(jsonStr, AnswerRecord.class);
-        answerRecord.setAppId(appId);
-        answerRecord.setAppType(application.getType());
-        answerRecord.setStrategy(application.getStrategy());
-        answerRecord.setAnswers(answerList);
-        return answerRecord;
+            // 查询对应题目
+            Question question = questionService.getQuestionByAppId(appId);
+            QuestionVo questionVo = QuestionVo.objToVo(question);
+            List<QuestionContent> questionContent = questionVo.getQuestions();
+
+            // 调用 AI 获取结果
+            // 封装 Prompt
+            String userMessage = getAiEvaluationScoringUserMessage(application, questionContent, answerList);
+            // AI 生成结果
+            String result = aiManager.doRequest(AI_EVALUATION_SCORING_SYSTEM_MESSAGE, userMessage);
+            // 结果处理
+            int start = result.indexOf("{");
+            int end = result.lastIndexOf("}");
+            String jsonStr = result.substring(start, end + 1);
+
+            // 缓存结果
+            resultCacheMap.put(cacheKey, jsonStr);
+
+            // 构造返回值
+            AnswerRecord answerRecord = JSONUtil.toBean(jsonStr, AnswerRecord.class);
+            answerRecord.setAppId(appId);
+            answerRecord.setAppType(application.getType());
+            answerRecord.setStrategy(application.getStrategy());
+            answerRecord.setAnswers(answerList);
+            return answerRecord;
+        } finally {
+            if (lock != null && lock.isLocked()) {
+                // 只允许本线程释放锁，防止被别的线程释放自己的锁（别的线程可能超时，导致释放锁晚了，此时别的线程已经加锁了），可能导致锁的失效
+                if (lock.isHeldByCurrentThread()) {
+                    lock.unlock();
+                }
+            }
+        }
     }
 }
