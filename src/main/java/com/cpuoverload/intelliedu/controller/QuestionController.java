@@ -9,11 +9,11 @@ import com.cpuoverload.intelliedu.manager.AiManager;
 import com.cpuoverload.intelliedu.model.dto.question.*;
 import com.cpuoverload.intelliedu.model.entity.Application;
 import com.cpuoverload.intelliedu.model.entity.Question;
-import com.cpuoverload.intelliedu.model.enums.AppType;
 import com.cpuoverload.intelliedu.model.vo.QuestionVo;
 import com.cpuoverload.intelliedu.service.ApplicationService;
 import com.cpuoverload.intelliedu.service.QuestionService;
-import dev.ai4j.openai4j.chat.ChatCompletionRequest;
+import com.cpuoverload.intelliedu.utils.AIMessageUtil;
+import dev.ai4j.openai4j.chat.ChatCompletionResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.web.bind.annotation.*;
@@ -21,10 +21,9 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
-import java.util.concurrent.CompletableFuture;
-
-import static com.cpuoverload.intelliedu.constant.AIConstant.GENERATE_EVALUATION_QUESTION_SYSTEM_MESSAGE;
-import static com.cpuoverload.intelliedu.constant.AIConstant.GENERATE_GRADE_QUESTION_SYSTEM_MESSAGE;
+import java.io.IOException;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
 
 @RestController
@@ -151,32 +150,8 @@ public class QuestionController {
         return ApiResponse.success(questionService.getQuestionByAppId(appId));
     }
 
-
-    //region ai生成题目
-
-
-    /**
-     * 生成题目的用户消息
-     *
-     * @param application
-     * @param questionNumber
-     * @param optionNumber
-     * @return
-     */
-    private String getGenerateQuestionUserMessage(Application application, int questionNumber, int optionNumber) {
-        StringBuilder userMessage = new StringBuilder();
-        userMessage.append("Application name: ").append(application.getAppName()).append("\n");
-        userMessage.append("Application description: ").append(application.getDescription()).append("\n");
-        userMessage.append("Application category: ").append(AppType.fromCode(application.getType()).getDescription() + " type").append("\n");
-        userMessage.append("Number of questions to generate: ").append(questionNumber);
-        userMessage.append("Number of options per question: ").append(optionNumber);
-        return userMessage.toString();
-    }
-
-
     @GetMapping("/ai_generate/sse")
     public SseEmitter aiGenerateQuestionSse(Long appId, Integer questionNumber, Integer optionNumber) {
-        // 调用 AI 生成题目的请求是否为空
         if (appId == null || questionNumber == null || optionNumber == null) {
             throw new BusinessException(Err.PARAMS_ERROR);
         }
@@ -187,31 +162,68 @@ public class QuestionController {
             throw new BusinessException(Err.NOT_FOUND_ERROR);
         }
 
-        // 封装prompt
-        String userMessage = getGenerateQuestionUserMessage(application, questionNumber, optionNumber);
-        String systemMessage = null;
+        // user prompt and system prompt
+        String userMessage = AIMessageUtil.getUserMessage(application, questionNumber, optionNumber);
+        String systemMessage = AIMessageUtil.getSystemMessage(application);
 
-        //测评类应用系统消息
-        if (application.getType() == AppType.EVALUATION.getCode()) {
-            systemMessage = GENERATE_EVALUATION_QUESTION_SYSTEM_MESSAGE;
-        }
-        //得分类应用系统消息
-        else if (application.getType() == AppType.GRADE.getCode()) {
-            systemMessage = GENERATE_GRADE_QUESTION_SYSTEM_MESSAGE;
-        }
-
-        ChatCompletionRequest chatCompletionRequest = aiManager.generalStreamRequest(systemMessage, userMessage, 1);
         //建立 sse 连接对象，0表示永不超时
         SseEmitter emitter = new SseEmitter(0L);
 
-        // 处理 AI 生成题目的请求
-        CompletableFuture<String> future = new CompletableFuture<>();
+        Consumer<ChatCompletionResponse> partialResponseCallback = getChatCompletionResponseConsumer(emitter);
 
-        aiManager.executeChatCompletion(chatCompletionRequest, emitter, future);
+        Runnable completionCallback = emitter::complete;
+
+        Consumer<Throwable> errorCallback = throwable -> {
+            log.error("Error during chat completion", throwable);
+            emitter.completeWithError(throwable);
+        };
+
+        System.out.println("--------------------");
+
+        aiManager.doStreamRequest(
+                systemMessage,
+                userMessage,
+                partialResponseCallback,
+                completionCallback,
+                errorCallback
+        );
 
         return emitter;
-
-
     }
-    //endregion
+
+    private static Consumer<ChatCompletionResponse> getChatCompletionResponseConsumer(SseEmitter emitter) {
+        StringBuilder contentBuilder = new StringBuilder();
+        AtomicInteger count = new AtomicInteger(0);
+
+        return response -> {
+            String message = response.choices().get(0).delta().content();
+
+            System.out.println("ai message: " + message);
+
+            if (message == null) return;
+
+            for (char c : message.toCharArray()) {
+                if (c == '{') {
+                    count.incrementAndGet();
+                }
+                if (count.get() > 0) {
+                    contentBuilder.append(c);
+                }
+                if (c == '}') {
+                    count.decrementAndGet();
+                    if (count.get() == 0) {
+                        try {
+                            emitter.send(contentBuilder.toString());
+                        } catch (IOException e) {
+                            log.error("Failed to send SSE event: {}", e.getMessage(), e);
+                            emitter.completeWithError(e);
+                            return;
+                        } finally {
+                            contentBuilder.setLength(0);
+                        }
+                    }
+                }
+            }
+        };
+    }
 }

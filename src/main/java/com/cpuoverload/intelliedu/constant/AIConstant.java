@@ -2,7 +2,9 @@ package com.cpuoverload.intelliedu.constant;
 
 public class AIConstant {
 
+    public static final String MODEL = "gpt-4o";
     public static final int MAX_TOKEN_LENGTH = 4095;
+    public static final double TEMPERATURE = 1.0;
 
     public static final String GENERATE_EVALUATION_QUESTION_SYSTEM_MESSAGE = "You are a meticulous question-generation expert. I will provide you with the following information:\n" +
             "```\n" +

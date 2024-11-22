@@ -59,7 +59,7 @@ public class AiEvaluationScoringStrategy implements ScoringStrategy {
         // 封装 Prompt
         String userMessage = getAiEvaluationScoringUserMessage(application, questionContent, answerList);
         // AI 生成
-        String result = aiManager.doRequest(AI_EVALUATION_SCORING_SYSTEM_MESSAGE, userMessage, 1);
+        String result = aiManager.doRequest(AI_EVALUATION_SCORING_SYSTEM_MESSAGE, userMessage);
         // 结果处理
         int start = result.indexOf("{");
         int end = result.lastIndexOf("}");
