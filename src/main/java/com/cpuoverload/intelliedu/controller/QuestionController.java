@@ -178,8 +178,6 @@ public class QuestionController {
             emitter.completeWithError(throwable);
         };
 
-        System.out.println("--------------------");
-
         aiManager.doStreamRequest(
                 systemMessage,
                 userMessage,
@@ -198,9 +196,11 @@ public class QuestionController {
         return response -> {
             String message = response.choices().get(0).delta().content();
 
-            System.out.println("ai message: " + message);
-
             if (message == null) return;
+
+            // openai 返回的字符中可能包括换行符 \n，而 SSE 协议中换行符有特殊含义，用于分隔消息的不同字段，若不处理会造成客户端解析出错
+            // 解决：将换行符替换为空格，注意不能直接删除所有空白字符，因为单词之间有空格
+            message = message.replaceAll("\\R", " ");
 
             for (char c : message.toCharArray()) {
                 if (c == '{') {
